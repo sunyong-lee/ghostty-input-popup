@@ -8,8 +8,8 @@
     {
       "name": "ghostty-input-popup",
       "source": "./",
-      "description": "Shows a macOS popup with the actual pending question whenever a Claude Code session is idle or waiting on a permission decision.",
-      "version": "0.7.0"
+      "description": "Shows a macOS popup with the pending question whenever a Claude Code session asks you one.",
+      "version": "0.7.1"
     }
   ]
 }
