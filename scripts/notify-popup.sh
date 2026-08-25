@@ -23,6 +23,7 @@ DATA=$(tail -n 50 "$TRANSCRIPT" 2>/dev/null \
            | if . == null then {kind: "text", body: "Waiting for your input.", nq: 0}
              elif .type=="text" then {kind: "text", body: (.text[0:700]), nq: 0}
              else {kind: "question",
+                   qid: .id,
                    nq: ([.input.questions[]?] | length),
                    questions: [.input.questions[]?
                                | {qtext: .question,
@@ -83,12 +84,24 @@ paste_text() {
 	APPLESCRIPT
 }
 
+# Give up rather than sit there: an unread notice outlives what it was reporting
+# and then stacks up behind the next one.
 notice() {
 	osascript - "$PROJECT" "$1" <<'APPLESCRIPT'
 on run argv
-	display dialog "Session: " & (item 1 of argv) & return & return & (item 2 of argv) with title "Claude Code" buttons {"OK"} default button "OK"
+	display dialog "Session: " & (item 1 of argv) & return & return & (item 2 of argv) with title "Claude Code" buttons {"OK"} default button "OK" giving up after 30
 end run
 APPLESCRIPT
+}
+
+# The id of the question the transcript is waiting on, empty if it is not
+# waiting on one. A dialog stays open after the question behind it is answered,
+# so this is what tells a live pick from a stale one.
+pending_qid() {
+	tail -n 50 "$TRANSCRIPT" 2>/dev/null \
+		| jq -s -r '[.[] | select(.type=="assistant") | .message.content[]?
+		             | select(.type=="text" or (.type=="tool_use" and .name=="AskUserQuestion"))]
+		            | last | if .type == "tool_use" then .id else "" end' 2>/dev/null
 }
 
 # Keys go to whichever window is frontmost once the terminal is activated, so
@@ -125,6 +138,10 @@ APPLESCRIPT
 	key code 36
 	delay 0.35"
 	done
+	# Answering in the terminal leaves this dialog open, so by now the picks may
+	# belong to a question that is already settled. Sending them would answer
+	# whatever the session moved on to.
+	[ "$(pending_qid)" = "$(jq -r '.qid' <<<"$DATA")" ] || exit 0
 	send_keys "$REPLAY"
 elif [ "$NTYPE" = idle_prompt ] && [ "$SESSIONS" -gt 1 ]; then
 	# Nothing to say here that is worth a dialog: the session is merely idle, and
@@ -136,7 +153,8 @@ elif [ "$NTYPE" = idle_prompt ]; then
 	# the reply just given, which is what made these popups read as stale.
 	REPLY=$(osascript - "$PROJECT" "$NMSG" <<'APPLESCRIPT'
 on run argv
-	set r to display dialog ("Session: " & (item 1 of argv) & return & return & (item 2 of argv)) with title "Claude Code" default answer "" buttons {"Dismiss", "Send"} default button "Send"
+	set r to display dialog ("Session: " & (item 1 of argv) & return & return & (item 2 of argv)) with title "Claude Code" default answer "" buttons {"Dismiss", "Send"} default button "Send" giving up after 120
+	if gave up of r then return ""
 	if button returned of r is "Dismiss" then return ""
 	return text returned of r
 end run
