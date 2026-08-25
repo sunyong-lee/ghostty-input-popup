@@ -1,7 +1,7 @@
 #!/bin/bash
 # Claude Code raises no notification when it asks a question, so the popup for
 # one cannot come from a hook. Poll the transcript instead and hand any pending
-# question to notify-popup.sh, which already knows how to render and answer it.
+# question to notify-popup.sh, which already knows how to render it.
 INPUT=$(cat)
 
 # Read the payload in the foreground, then hand it to a detached copy: polling
@@ -22,14 +22,20 @@ STALE_SECS=1800
 [ -n "$TRANSCRIPT" ] && [ "$TRANSCRIPT" != null ] || exit 0
 
 echo $$ >"$PIDFILE"
+# Leaving the pidfile behind would hand the next stop-watcher.sh a dead pid to
+# kill, which by then belongs to whatever recycled it. Only clear the file while
+# this watcher still owns it: a newer one may have taken it over already.
+trap '[ "$(cat "$PIDFILE" 2>/dev/null)" = "$$" ] && rm -f "$PIDFILE"' EXIT INT TERM
 
 # A question's tool_use id changes per question, so it doubles as "have I shown
 # this one yet" — including after a Dismiss, which should stay dismissed.
 LAST=""
 while :; do
-	# SessionEnd removes the pidfile; a crashed session leaves the transcript
-	# untouched. Either way, stop rather than linger as an orphan.
-	[ -f "$PIDFILE" ] || exit 0
+	# SessionEnd removes the pidfile, and SessionStart firing again on resume,
+	# clear or compact rewrites it with a newer watcher's pid. Owning it is the
+	# only claim to this session, so checking for the file alone left the older
+	# watcher polling and every question popped up twice.
+	[ "$(cat "$PIDFILE" 2>/dev/null)" = "$$" ] || exit 0
 	if [ -e "$TRANSCRIPT" ]; then
 		AGE=$(($(date +%s) - $(stat -f %m "$TRANSCRIPT")))
 		[ "$AGE" -gt "$STALE_SECS" ] && exit 0
