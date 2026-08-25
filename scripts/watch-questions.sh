@@ -35,11 +35,8 @@ while :; do
 		[ "$AGE" -gt "$STALE_SECS" ] && exit 0
 	fi
 
-	SIG=$(tail -n 50 "$TRANSCRIPT" 2>/dev/null \
-		| jq -s -r '[.[] | select(.type=="assistant") | .message.content[]?
-		             | select(.type=="text" or (.type=="tool_use" and .name=="AskUserQuestion"))]
-		            | last
-		            | if .type == "tool_use" then .id else "" end' 2>/dev/null)
+	SIG=$(tail -n 80 "$TRANSCRIPT" 2>/dev/null \
+		| jq -s -r -f "$HERE/pending-question.jq" 2>/dev/null | jq -r '.qid' 2>/dev/null)
 
 	if [ -n "$SIG" ] && [ "$SIG" != "$LAST" ]; then
 		LAST=$SIG

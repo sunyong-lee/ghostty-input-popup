@@ -1,8 +1,11 @@
 # ghostty-input-popup
 
-A Claude Code plugin that pops up a macOS dialog whenever a session needs you —
-and lets you answer from the dialog, so you never lose track of which of your
-concurrent sessions is waiting.
+A Claude Code plugin that pops up a macOS dialog when a session asks you a
+question — and lets you answer from the dialog, so you never lose track of which
+of your concurrent sessions is waiting.
+
+Questions only. Nothing pops up while a session is merely idle or waiting on a
+permission decision: a dialog with nothing to answer is noise.
 
 ## Install
 
@@ -13,49 +16,42 @@ concurrent sessions is waiting.
 
 ## What you get
 
-| The session is | Popup | Answering |
-|---|---|---|
-| asking a question | one `choose from list` per question | pick one, it is sent for you |
-| waiting for a prompt | `display dialog` with a text field | type a reply, it is sent for you |
-| waiting on a permission decision | notice only | answer in the terminal |
+| Sessions running | Popup |
+|---|---|
+| one | a list of the question's options — pick one and it is sent for you |
+| several | the question and its options, to answer in the terminal |
 
 Every pick is collected before anything is sent, so Dismiss at any point sends
-nothing at all. Picks replay as arrow keys; typed text goes via the clipboard,
-which keeps Korean and emoji intact.
+nothing at all. Picks reach the session as arrow keys after the terminal is
+activated, which is why more than one session means no sending: the keys go to
+whichever window is frontmost, not necessarily the one that asked.
 
 ## How it works
 
-A `Notification` hook covers the prompt and permission cases. Questions cannot
-work that way — Claude Code raises no notification when it asks one — so a
-`SessionStart` hook starts `scripts/watch-questions.sh`, which polls the
-transcript once a second and hands any pending question to the same popup
-script. `SessionEnd` stops it.
+Claude Code raises no notification when it asks a question, so a hook cannot see
+one. A `SessionStart` hook detaches `scripts/watch-questions.sh`, which reads the
+transcript once a second and hands any pending question to
+`scripts/notify-popup.sh`. `SessionEnd` removes the pidfile the watcher checks
+each second; a session that dies without it gives up on a transcript left
+untouched for 30 minutes.
 
-The popup shows the notification's own message rather than the tail of the
-transcript. That tail is usually the reply just given, which reads as the wrong
-message entirely.
+Whether a question is still pending is decided by
+`scripts/pending-question.jq`, shared so the watcher and the popup cannot
+disagree. An answer is recorded as a user `tool_result`, not an assistant block,
+so a filter that reads only assistant blocks calls an answered question pending —
+which made popups appear just after answering. The pick is checked against that
+filter again before any key is sent, because a dialog outlives the question
+behind it.
 
-`~/.claude/ghostty-input-popup.log` gets one line per run — event type, what was
-pending, first 80 characters. Start there when a popup surprises you.
-
-## Tuning
-
-The prompt popup rides on Claude Code's idle notification, 60 seconds by
-default. For something quicker, set `messageIdleNotifThresholdMs` in
-`~/.claude.json`:
-
-```json
-{ "messageIdleNotifThresholdMs": 10000 }
-```
+`~/.claude/ghostty-input-popup.log` gets one line per run — what was pending, the
+question id, first 80 characters. Start there when a popup surprises you.
 
 ## Requirements
 
 - macOS (uses `osascript`)
 - `jq`
 - Accessibility permission for your terminal — System Settings → Privacy &
-  Security → Accessibility. Without it the popup still appears, but nothing
+  Security → Accessibility. Without it the popup still appears, but no pick
   reaches the session.
-
-Answers land in whichever window is frontmost after the terminal is activated,
-so with several sessions open they can go to the wrong one. `TERMINAL_APP` in
-`scripts/notify-popup.sh` names the app to activate; Ghostty by default.
+- `TERMINAL_APP` in `scripts/notify-popup.sh` names the app to activate;
+  Ghostty by default.
