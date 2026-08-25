@@ -83,7 +83,23 @@ paste_text() {
 	APPLESCRIPT
 }
 
-if [ "$KIND" = question ]; then
+notice() {
+	osascript - "$PROJECT" "$1" <<'APPLESCRIPT'
+on run argv
+	display dialog "Session: " & (item 1 of argv) & return & return & (item 2 of argv) with title "Claude Code" buttons {"OK"} default button "OK"
+end run
+APPLESCRIPT
+}
+
+# Keys go to whichever window is frontmost once the terminal is activated, so
+# with more than one session running an answer lands in the wrong one. Each
+# watcher leaves a pidfile, so counting them says when sending is unsafe.
+SESSIONS=$(find "$HOME/.claude" -maxdepth 1 -name 'ghostty-input-popup.*.pid' 2>/dev/null | wc -l | tr -d ' ')
+
+if [ "$KIND" = question ] && [ "$SESSIONS" -gt 1 ]; then
+	# Still say what is waiting; just do not pretend it can be answered here.
+	notice "$BODY"
+elif [ "$KIND" = question ]; then
 	# Collect every pick before sending a single key. Answering as you go would
 	# leave the session half-filled the moment you hit Dismiss on question 2.
 	REPLAY=""
@@ -110,6 +126,10 @@ APPLESCRIPT
 	delay 0.35"
 	done
 	send_keys "$REPLAY"
+elif [ "$NTYPE" = idle_prompt ] && [ "$SESSIONS" -gt 1 ]; then
+	# Nothing to say here that is worth a dialog: the session is merely idle, and
+	# the reply cannot be sent from the popup anyway.
+	exit 0
 elif [ "$NTYPE" = idle_prompt ]; then
 	# The terminal is sitting on a free prompt, so a typed reply can go straight
 	# in. Prompt with the notification's own message: the transcript tail here is
@@ -131,11 +151,7 @@ elif [ "$NTYPE" = permission_prompt ]; then
 	# A permission decision blocks the session just as a question does. Show the
 	# notification's own message, never the transcript tail, which at this point
 	# is the prose leading up to the tool call.
-	osascript - "$PROJECT" "$NMSG" <<'APPLESCRIPT'
-on run argv
-	display dialog "Session: " & (item 1 of argv) & return & return & (item 2 of argv) with title "Claude Code" buttons {"OK"} default button "OK"
-end run
-APPLESCRIPT
+	notice "$NMSG"
 else
 	# Nothing is blocking, so nothing is worth interrupting for. Popping up on
 	# idle showed whatever message the transcript happened to end on, which
