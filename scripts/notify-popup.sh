@@ -57,6 +57,32 @@ send_keys() {
 	APPLESCRIPT
 }
 
+# Free text goes via the clipboard, not `keystroke`, which mangles Korean and
+# emoji. Restore the old clipboard so answering a popup does not eat whatever
+# the user had copied.
+paste_text() {
+	osascript - "$1" <<-APPLESCRIPT
+		on run argv
+			set saved to ""
+			try
+				set saved to the clipboard
+			end try
+			set the clipboard to (item 1 of argv)
+			tell application "$TERMINAL_APP" to activate
+			delay 0.4
+			tell application "System Events"
+				keystroke "v" using command down
+				delay 0.2
+				key code 36
+			end tell
+			delay 0.2
+			try
+				set the clipboard to saved
+			end try
+		end run
+	APPLESCRIPT
+}
+
 if [ "$KIND" = question ]; then
 	# Collect every pick before sending a single key. Answering as you go would
 	# leave the session half-filled the moment you hit Dismiss on question 2.
@@ -84,6 +110,23 @@ APPLESCRIPT
 	delay 0.35"
 	done
 	send_keys "$REPLAY"
+elif [ "$NTYPE" = idle_prompt ]; then
+	# The terminal is sitting on a free prompt, so a typed reply can go straight
+	# in. Prompt with the notification's own message: the transcript tail here is
+	# the reply just given, which is what made these popups read as stale.
+	REPLY=$(osascript - "$PROJECT" "$NMSG" <<'APPLESCRIPT'
+on run argv
+	set r to display dialog ("Session: " & (item 1 of argv) & return & return & (item 2 of argv)) with title "Claude Code" default answer "" buttons {"Dismiss", "Send"} default button "Send"
+	if button returned of r is "Dismiss" then return ""
+	return text returned of r
+end run
+APPLESCRIPT
+)
+	# Not `[ -n ... ] && paste_text`: as the last command in the branch that
+	# would exit 1 on Dismiss, reporting a hook failure for a normal cancel.
+	if [ -n "$REPLY" ]; then
+		paste_text "$REPLY"
+	fi
 elif [ "$NTYPE" = permission_prompt ]; then
 	# A permission decision blocks the session just as a question does. Show the
 	# notification's own message, never the transcript tail, which at this point
