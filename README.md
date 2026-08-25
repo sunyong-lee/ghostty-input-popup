@@ -36,21 +36,36 @@ the popup only reports.
 
 ## How it works
 
-Claude Code raises no notification when it asks a question, so a hook cannot see
-one. A `SessionStart` hook detaches `scripts/watch-questions.sh`, which reads the
-transcript once a second and hands any pending question to
-`scripts/notify-popup.sh`. `SessionEnd` removes the pidfile the watcher checks
-each second; a session that dies without it gives up on a transcript left
-untouched for 30 minutes.
+A `PreToolUse` hook matching the `AskUserQuestion` tool runs before the question
+reaches you and hands `scripts/popup-from-hook.sh` the questions and their
+options outright, so the dialog is built without reading anything. The hook
+detaches the dialog and returns at once — blocking there would hold the question
+off the terminal until you closed it.
 
-Whether a question is still pending is decided by `scripts/pending-question.jq`,
-shared so the watcher and the popup cannot disagree. An answer is recorded as a
-user `tool_result`, not an assistant block, so a filter reading only assistant
-blocks calls an answered question pending — which made popups appear just after
-answering.
+The `Notification` event is no help: it carries `permission_prompt` and
+`idle_prompt`, but nothing for a question.
+
+### Why polling the transcript was abandoned
+
+Claude Code flushes the transcript at turn boundaries, so the record for a
+question and the record for its answer arrive in the same write. While a question
+is on screen there is nothing on disk to find. Measured on 2026-08-25: the file
+sat untouched for the whole 12 seconds a question was up, then grew by six
+records at once, question and answer together. A record's `timestamp` is when the
+block was produced, not when it was written.
+
+That single fact explains both symptoms this plugin has had. Before
+`scripts/pending-question.jq` gained its answered-check, every popup arrived just
+after answering. After it, the check correctly reports every question the watcher
+ever sees as already settled — so questions produced no popup at all.
+
+`scripts/watch-questions.sh` and `scripts/pending-question.jq` are still wired to
+`SessionStart` and `SessionEnd`. They cannot fire for a question and are kept only
+until the hook has proven itself.
 
 `~/.claude/ghostty-input-popup.log` gets one line per run — what was pending, the
-question id, first 80 characters. Start there when a popup surprises you.
+question id, first 80 characters. Lines from the hook carry `"src":"hook"`. Start
+there when a popup surprises you.
 
 ## Requirements
 

@@ -9,7 +9,7 @@
       "name": "ghostty-input-popup",
       "source": "./",
       "description": "Shows a macOS popup with the pending question whenever a Claude Code session asks you one.",
-      "version": "0.7.1"
+      "version": "0.8.0"
     }
   ]
 }
