@@ -120,5 +120,9 @@ on run argv
 end run
 APPLESCRIPT
 )
-	[ -n "$REPLY" ] && paste_text "$REPLY"
+	# Not `[ -n ... ] && paste_text`: as the last command in the script that
+	# would exit 1 on Dismiss, reporting a hook failure for a normal cancel.
+	if [ -n "$REPLY" ]; then
+		paste_text "$REPLY"
+	fi
 fi

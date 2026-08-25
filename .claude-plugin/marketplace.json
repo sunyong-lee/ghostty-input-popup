@@ -9,7 +9,7 @@
       "name": "ghostty-input-popup",
       "source": "./",
       "description": "Shows a macOS popup with the actual pending question whenever a Claude Code session is idle or waiting on a permission decision.",
-      "version": "0.3.0"
+      "version": "0.3.1"
     }
   ]
 }
