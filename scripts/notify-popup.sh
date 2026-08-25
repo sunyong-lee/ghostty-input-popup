@@ -15,9 +15,13 @@ MSG=$(tail -n 50 "$TRANSCRIPT" 2>/dev/null \
             | last
             | if . == null then "Waiting for your input."
               elif .type=="text" then .text
-              else [.input.questions[]?.question] | join("\n\n")
+              else [.input.questions[]?
+                    | .question + "\n"
+                      + ([.options[]?.label] | to_entries
+                         | map("  \(.key + 1). \(.value)") | join("\n"))]
+                   | join("\n\n")
               end
-            | .[0:300]')
+            | .[0:700]')
 
 # Pass the text in as arguments so AppleScript needs no quote/backslash escaping
 osascript - "$PROJECT" "$MSG" <<'APPLESCRIPT'

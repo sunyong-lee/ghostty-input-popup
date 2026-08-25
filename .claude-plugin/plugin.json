@@ -1,7 +1,7 @@
 {
   "name": "ghostty-input-popup",
   "description": "Shows a macOS popup dialog with the actual pending question whenever a Claude Code session is idle or waiting on a permission decision — so you never lose track of which of your concurrent sessions needs a reply.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "author": {
     "name": "sunyong-lee",
     "url": "https://github.com/sunyong-lee"
