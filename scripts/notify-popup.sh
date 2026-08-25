@@ -10,8 +10,11 @@ TERMINAL_APP=Ghostty
 # matching text alone would show the prose above it instead of the question.
 # Slice inside jq so the 700-char cap lands on a character boundary, not
 # mid-UTF-8-sequence.
+# -s is required: the transcript is JSONL, so without slurping jq would run the
+# filter per line and `.[]` would iterate each record's values instead of the
+# records themselves.
 DATA=$(tail -n 50 "$TRANSCRIPT" 2>/dev/null \
-  | jq -c '[.[] | select(.type=="assistant") | .message.content[]?
+  | jq -s -c '[.[] | select(.type=="assistant") | .message.content[]?
             | select(.type=="text" or (.type=="tool_use" and .name=="AskUserQuestion"))]
            | last
            | if . == null then {kind: "text", body: "Waiting for your input.", nq: 0}
