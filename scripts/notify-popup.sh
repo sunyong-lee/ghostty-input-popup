@@ -5,6 +5,8 @@ TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path')
 PROJECT=$(basename "$CWD")
 TERMINAL_APP=Ghostty
 LOG="$HOME/.claude/ghostty-input-popup.log"
+NTYPE=$(echo "$INPUT" | jq -r '.notification_type // ""')
+NMSG=$(echo "$INPUT" | jq -r '.message // ""')
 
 # Pull whatever the session is actually waiting on: the last assistant block,
 # be it prose or an AskUserQuestion. The question lives in a tool_use block, so
@@ -38,9 +40,9 @@ BODY=$(jq -r '.body' <<<"$DATA")
 
 # The popup can only ever show what the transcript held at fire time, so log
 # that rather than guessing why the wrong message appeared.
-jq -nc --arg ts "$(date -u +%FT%TZ)" --arg ev "$(jq -r '.message // ""' <<<"$INPUT")" \
+jq -nc --arg ts "$(date -u +%FT%TZ)" --arg ev "$NMSG" --arg ntype "$NTYPE" \
        --arg kind "$KIND" --arg nq "$NQ" --arg peek "${BODY:0:80}" \
-       '{ts: $ts, event: $ev, kind: $kind, nq: $nq, peek: $peek}' >>"$LOG" 2>/dev/null
+       '{ts: $ts, ntype: $ntype, event: $ev, kind: $kind, nq: $nq, peek: $peek}' >>"$LOG" 2>/dev/null
 
 # Replay the collected answers in one go. Arrow keys rather than digit
 # shortcuts: moving down IDX-1 times from the first option lands on the pick
@@ -82,9 +84,18 @@ APPLESCRIPT
 	delay 0.35"
 	done
 	send_keys "$REPLAY"
+elif [ "$NTYPE" = permission_prompt ]; then
+	# A permission decision blocks the session just as a question does. Show the
+	# notification's own message, never the transcript tail, which at this point
+	# is the prose leading up to the tool call.
+	osascript - "$PROJECT" "$NMSG" <<'APPLESCRIPT'
+on run argv
+	display dialog "Session: " & (item 1 of argv) & return & return & (item 2 of argv) with title "Claude Code" buttons {"OK"} default button "OK"
+end run
+APPLESCRIPT
 else
-	# Only a pending question is worth interrupting for. Popping up on idle
-	# showed whatever message the transcript happened to end on, which reads as
-	# a reply rather than something to answer.
+	# Nothing is blocking, so nothing is worth interrupting for. Popping up on
+	# idle showed whatever message the transcript happened to end on, which
+	# reads as a reply rather than something to answer.
 	exit 0
 fi
