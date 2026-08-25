@@ -1,0 +1,15 @@
+{
+  "name": "personal-plugins",
+  "owner": {
+    "name": "sunyong-lee",
+    "url": "https://github.com/sunyong-lee"
+  },
+  "plugins": [
+    {
+      "name": "ghostty-input-popup",
+      "source": "./",
+      "description": "Shows a macOS popup with the actual pending question whenever a Claude Code session is idle or waiting on a permission decision.",
+      "version": "0.1.0"
+    }
+  ]
+}
