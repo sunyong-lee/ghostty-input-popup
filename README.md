@@ -1,8 +1,8 @@
 # ghostty-input-popup
 
 A Claude Code plugin that pops up a macOS dialog when a session asks you a
-question, so you never lose track of which of your concurrent sessions is
-waiting.
+question and takes your answer there, so you never lose track of which of your
+concurrent sessions is waiting — or go hunting for its window to reply.
 
 Questions only, and nothing else. No popup while a session is merely idle or
 waiting on a permission decision — a dialog with nothing to answer is noise.
@@ -16,31 +16,41 @@ waiting on a permission decision — a dialog with nothing to answer is noise.
 
 ## What you get
 
-The popup shows the question and its numbered options, matching the numbering in
-the terminal. You answer in the terminal; the dialog is there to tell you which
-session is asking and what it wants.
+The popup lists the question's options and takes your pick, so the session has
+its answer without you finding the right terminal first.
 
-It gives up after two minutes, so an unread one does not outlive its question and
-stack up behind the next.
+Nothing traps you in the dialog. Cancel it, let it time out after two minutes, or
+pick `(answer in the terminal instead)`, and it steps aside — the terminal picker
+comes up as usual. A question with several parts asks them one at a time, and
+abandoning any part hands the whole question back to the terminal: half an answer
+is worse than none.
 
-### Why it does not answer for you
+### Why replaying keystrokes was abandoned
 
-Answering from the popup was built and removed. Sending a pick means activating
-the terminal and replaying keys into it, and AppleScript cannot address a
-particular window or tab — the keys go wherever the frontmost window happens to
-be. In testing, answers landed in a different session twice. Counting sessions
-first did not help, since sessions started before the plugin are invisible to it.
+Answering used to mean activating the terminal and replaying keys into it, and
+AppleScript cannot address a particular window or tab — the keys went wherever
+the frontmost window happened to be. In testing, answers landed in a different
+session twice. Counting sessions first did not help, since sessions started
+before the plugin are invisible to it.
 
-Delivering an answer to the wrong session is worse than not delivering one, so
-the popup only reports.
+The hook needs none of that. A pick travels back through the hook that asked, so
+it cannot reach the wrong session.
 
 ## How it works
 
 A `PreToolUse` hook matching the `AskUserQuestion` tool runs before the question
 reaches you and hands `scripts/popup-from-hook.sh` the questions and their
-options outright, so the dialog is built without reading anything. The hook
-detaches the dialog and returns at once — blocking there would hold the question
-off the terminal until you closed it.
+options outright, so the dialog is built without reading anything. The hook waits
+for your pick, which is why the terminal picker stays away while the dialog is up.
+
+A `PreToolUse` hook cannot hand Claude a tool result, so the pick goes back the
+only way there is: the tool call is denied and the pick rides along as
+`permissionDecisionReason`. Cancelling or running out of time writes no decision
+at all, which leaves the normal permission flow untouched.
+
+`choose from list` has no `giving up after`, so the two-minute limit is kept in
+the script rather than by AppleScript, which also means the dialog is killed
+rather than left behind.
 
 The `Notification` event is no help: it carries `permission_prompt` and
 `idle_prompt`, but nothing for a question.
@@ -60,12 +70,13 @@ after answering. After it, the check correctly reports every question the watche
 ever sees as already settled — so questions produced no popup at all.
 
 `scripts/watch-questions.sh` and `scripts/pending-question.jq` are still wired to
-`SessionStart` and `SessionEnd`. They cannot fire for a question and are kept only
-until the hook has proven itself.
+`SessionStart` and `SessionEnd`. The hook has since fired on real questions, so
+they are dead weight and come out next.
 
-`~/.claude/ghostty-input-popup.log` gets one line per run — what was pending, the
-question id, first 80 characters. Lines from the hook carry `"src":"hook"`. Start
-there when a popup surprises you.
+`~/.claude/ghostty-input-popup.log` carries `"src":"hook"` on everything the hook
+writes: a `"kind":"question"` line before the dialog opens, and a
+`"kind":"answer"` line once a pick is delivered. A question line with no answer
+line after it is one you left alone. Start there when a popup surprises you.
 
 ## Requirements
 
